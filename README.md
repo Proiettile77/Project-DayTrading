@@ -44,7 +44,7 @@ ENABLE_BINANCE=false
 # --- Alpaca (Paper) ---
 ALPACA_API_KEY=pk_xxxxxxxxxxxxxxxx
 ALPACA_SECRET_KEY=sk_xxxxxxxxxxxxxxxx
-ALPACA_BASE_URL=https://paper-api.alpaca.markets
+ALPACA_BASE_URL=https://paper-api.alpaca.markets/v2
 ALPACA_DATA_BASE_URL=https://data.alpaca.markets
 ALPACA_DATA_FEED=iex   # iex = gratis, sip = a pagamento
 
