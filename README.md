@@ -31,7 +31,7 @@
 
 ## 🔑 Configurazione
 
->Modifica il file .env nella root del progetto con le tue API key:
+>Crea un file .env nella root del progetto con le tue API key:
 
 ```bash
 # --- Feature flags ---
