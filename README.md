@@ -18,6 +18,7 @@
   - Parametri strategia.
 - **Metriche**: CAGR, Sharpe/Sortino, Max Drawdown, Calmar, ecc.
 - **Caching** dei dati per velocizzare le prove.
+- Semplice modulo di machine learning per prevedere la direzione del prezzo.
 
 ---
 
