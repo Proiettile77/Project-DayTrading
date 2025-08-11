@@ -9,7 +9,15 @@ if ROOT not in sys.path:
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from utils.config import SETTINGS
+from utils.config import (
+    SETTINGS,
+    load_credentials,
+    save_credentials,
+    test_alpaca_credentials,
+    current_storage_backend,
+    reload_settings,
+    clear_credentials,
+)
 from utils.logging_json import get_logger
 from data.loader import load_ohlcv
 from backtest.engine import run_backtest
@@ -19,6 +27,13 @@ from paper import alpaca
 log = get_logger("ui")
 
 st.set_page_config(page_title="PaperTrader Lab — (Simulazione, non consulenza)", layout="wide")
+
+# Bootstrap credenziali
+creds_boot = load_credentials()
+if not creds_boot.get("key"):
+    st.session_state.setdefault("show_wizard", True)
+else:
+    st.session_state.setdefault("show_wizard", False)
 
 # Disclaimer banner
 st.info("**Solo simulazione / paper trading. Questa applicazione non costituisce consulenza finanziaria.** "
@@ -72,7 +87,7 @@ def cached_load(symbols, provider, timeframe, start_date, end_date, tz, session_
     )
     return df
 
-tabs = st.tabs(["Backtest", "Paper", "ML", "Log/Report"])
+tabs = st.tabs(["Backtest", "Paper", "ML", "Log/Report", "Impostazioni"])
 
 with tabs[0]:
     st.subheader("Backtest — Motore: Backtrader")
@@ -162,3 +177,75 @@ with tabs[3]:
     st.subheader("Log / Report")
     st.write("Eventi principali (JSON)")
     st.code('{"ts":"...","level":"INFO","name":"ui","msg":"example"}', language="json")
+
+with tabs[4]:
+    st.subheader("Impostazioni")
+    creds = load_credentials()
+    backend = current_storage_backend()
+    status = "missing"
+    detail = ""
+    if creds.get("key"):
+        ok, err = test_alpaca_credentials(creds["key"], creds["secret"], creds["base_url"])
+        if ok:
+            status = "ok"
+        else:
+            status = "error"
+            detail = err
+    if status == "ok":
+        st.success("Credenziali verificate", icon="✅")
+    elif status == "error":
+        st.error("Errore credenziali", icon="❌")
+        if detail:
+            st.caption(detail)
+    else:
+        st.warning("Credenziali mancanti", icon="⚠️")
+
+    if st.session_state.get("show_wizard", False) or status != "ok":
+        st.info(
+            "Inserisci le tue credenziali Alpaca Paper. Le chiavi non saranno salvate nel repository Git.",
+            icon="ℹ️",
+        )
+        api_key = st.text_input("API Key")
+        secret_key = st.text_input("Secret", type="password")
+        base_url = st.text_input(
+            "Base URL",
+            value=creds.get("base_url", "https://paper-api.alpaca.markets"),
+        )
+        labels = {"keyring": "Keychain (consigliato)", "secrets": "secrets.toml", "env_file": ".env"}
+        target = st.selectbox("Metodo di archiviazione", list(labels.keys()), format_func=lambda x: labels[x])
+        if st.button("Salva & Test", type="primary"):
+            if not api_key or not secret_key:
+                st.error("API Key e Secret obbligatorie")
+            else:
+                try:
+                    save_credentials(target, api_key, secret_key, base_url)
+                    ok, err = test_alpaca_credentials(api_key, secret_key, base_url)
+                    if ok:
+                        reload_settings()
+                        st.session_state["show_wizard"] = False
+                        st.success("Credenziali verificate e salvate")
+                    else:
+                        st.error(f"Verifica fallita: {err}")
+                except Exception as e:
+                    st.error(f"Salvataggio fallito: {e}. Prova un altro metodo.")
+        st.caption("Le chiavi sono memorizzate localmente nel backend scelto.")
+    else:
+        show = st.checkbox("Mostra secret", value=False)
+        st.text_input("API Key", creds.get("key"), disabled=True)
+        st.text_input(
+            "Secret",
+            creds.get("secret") if show else "*" * len(creds.get("secret", "")),
+            disabled=True,
+        )
+        st.write(f"Storage attuale: {backend or 'N/D'}")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Ruota chiavi"):
+                st.session_state["show_wizard"] = True
+        with col2:
+            if st.button("Logout"):
+                if backend:
+                    clear_credentials(backend)
+                reload_settings()
+                st.session_state["show_wizard"] = True
+                st.warning("Credenziali rimosse")

@@ -30,28 +30,46 @@
 
 ---
 
-## 🔑 Configurazione
+## 🔑 Configurazione credenziali
 
->Crea un file .env nella root del progetto con le tue API key:
+Al primo avvio l'applicazione mostra un **Setup Wizard** per inserire le credenziali *Alpaca Paper*.
+
+1. Inserisci **API Key** e **Secret** (quest'ultima è mascherata).
+2. Scegli dove salvarle:
+   - **Keychain** (consigliato, usa `keyring` del sistema operativo)
+   - `secrets.toml` (`.streamlit/secrets.toml`)
+   - file `.env`
+3. Premi **Salva & Test** → le chiavi vengono memorizzate, ricaricate e verificate con una chiamata di prova.
+
+Ordine di precedenza al caricamento:
+1. Variabili d'ambiente (`APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`, `APCA_API_BASE_URL`)
+2. `st.secrets` (`.streamlit/secrets.toml`)
+3. Keychain (`keyring`, servizio `alpaca`, utente `default`)
+4. File `.env`
+
+Le chiavi **non** vengono mai salvate nel repository Git. Per distribuire l'app in ambienti gestiti (es. Streamlit Cloud) usa `st.secrets`; in locale preferisci il Keychain oppure `.env` (ignorato da Git).
+
+Esempio di `.env`:
 
 ```bash
-# --- Feature flags ---
-DEFAULT_ENGINE=backtrader
-DEFAULT_DATA_PROVIDER=alpaca
-ENABLE_ALPACA=true
-ENABLE_OANDA=false
-ENABLE_BINANCE=false
-
-# --- Alpaca (Paper) ---
-ALPACA_API_KEY=pk_xxxxxxxxxxxxxxxx
-ALPACA_SECRET_KEY=sk_xxxxxxxxxxxxxxxx
-ALPACA_BASE_URL=https://paper-api.alpaca.markets/v2
-ALPACA_DATA_BASE_URL=https://data.alpaca.markets
-ALPACA_DATA_FEED=iex   # iex = gratis, sip = a pagamento
-
-# --- Alpha Vantage (opzionale) ---
-ALPHAVANTAGE_API_KEY=AV_XXXXXXXXXXXX
+APCA_API_KEY_ID=pk_xxxxxxxxxxxxxxxx
+APCA_API_SECRET_KEY=sk_xxxxxxxxxxxxxxxx
+APCA_API_BASE_URL=https://paper-api.alpaca.markets
 ```
+
+### Dipendenze
+
+Installazione librerie aggiuntive:
+
+```bash
+pip install python-dotenv keyring
+```
+
+`keyring` utilizza backend diversi a seconda dell'OS:
+
+- **macOS**: Keychain integrato
+- **Windows**: Credential Manager
+- **Linux**: SecretService/Keyring (potrebbero servire pacchetti `gnome-keyring`/`libsecret`)
 
 # 📌 Come ottenere le API Key Alpaca:
 
