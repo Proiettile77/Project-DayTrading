@@ -85,6 +85,7 @@ pip install python-dotenv keyring
 
 ```bash
 cd cartellaProggetto
+chmod +x ./run.sh
 ./run.sh
 ```
 
