@@ -31,8 +31,10 @@ def test_test_alpaca_credentials(monkeypatch):
         def get_account(self):
             return True
 
-    def fake_client(key, secret, base_url=None):
+    def fake_client(key, secret, paper=None, url_override=None):
         assert key == "k" and secret == "s"
+        assert paper is True
+        assert url_override == "https://paper-api.alpaca.markets"
         return DummyClient()
 
     monkeypatch.setattr("alpaca.trading.client.TradingClient", fake_client)
