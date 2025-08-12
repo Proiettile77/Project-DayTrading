@@ -7,7 +7,12 @@ def _trading_client():
     from alpaca.trading.client import TradingClient
     if not SETTINGS.alpaca_api_key or not SETTINGS.alpaca_secret_key:
         raise ProviderError("Missing Alpaca API keys")
-    return TradingClient(SETTINGS.alpaca_api_key, SETTINGS.alpaca_secret_key, paper=True)
+    return TradingClient(
+        SETTINGS.alpaca_api_key,
+        SETTINGS.alpaca_secret_key,
+        paper="paper" in SETTINGS.alpaca_base_url,
+        url_override=SETTINGS.alpaca_base_url,
+    )
 
 def account():
     tc = _trading_client()

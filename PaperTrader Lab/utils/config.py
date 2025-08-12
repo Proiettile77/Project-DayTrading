@@ -65,7 +65,12 @@ def test_alpaca_credentials(key: str, secret: str, base_url: str) -> Tuple[bool,
     try:
         from alpaca.trading.client import TradingClient
 
-        client = TradingClient(key, secret, base_url=base_url)
+        client = TradingClient(
+            key,
+            secret,
+            paper="paper" in base_url,
+            url_override=base_url,
+        )
         client.get_account()
         return True, ""
     except Exception as e:  # pragma: no cover - network errors mocked nei test
