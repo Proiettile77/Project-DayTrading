@@ -45,7 +45,11 @@ def test_credentials(provider: str, key: str, secret: str, base_url: str) -> Tup
         PROVIDERS[provider].validate({"key": key, "secret": secret, "base_url": base_url})
         return True, ""
     except Exception as e:  # pragma: no cover - network or plugin errors
-        return False, str(e)
+        msg = str(e)
+        cause = getattr(e, "__cause__", None)
+        if cause:
+            msg = f"{msg} (caused by {cause})"
+        return False, msg
 
 
 def _as_bool(x: str, default: bool = False) -> bool:
