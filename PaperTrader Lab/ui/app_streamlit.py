@@ -13,12 +13,14 @@ from utils.config import (
     SETTINGS,
     load_credentials,
     save_credentials,
-    test_alpaca_credentials,
+    test_credentials,
     current_storage_backend,
     reload_settings,
     clear_credentials,
+    PROVIDERS,
 )
 from utils.logging_json import get_logger
+from utils import secure_store
 from data.loader import load_ohlcv
 from backtest.engine import run_backtest
 from paper.router import connect_info
@@ -28,8 +30,8 @@ log = get_logger("ui")
 
 st.set_page_config(page_title="PaperTrader Lab — (Simulazione, non consulenza)", layout="wide")
 
-# Bootstrap credenziali
-creds_boot = load_credentials()
+# Bootstrap credenziali per provider predefinito (alpaca)
+creds_boot = load_credentials("alpaca")
 if not creds_boot.get("key"):
     st.session_state.setdefault("show_wizard", True)
 else:
@@ -180,72 +182,90 @@ with tabs[3]:
 
 with tabs[4]:
     st.subheader("Impostazioni")
-    creds = load_credentials()
-    backend = current_storage_backend()
-    status = "missing"
-    detail = ""
-    if creds.get("key"):
-        ok, err = test_alpaca_credentials(creds["key"], creds["secret"], creds["base_url"])
-        if ok:
-            status = "ok"
-        else:
-            status = "error"
-            detail = err
-    if status == "ok":
-        st.success("Credenziali verificate", icon="✅")
-    elif status == "error":
-        st.error("Errore credenziali", icon="❌")
-        if detail:
-            st.caption(detail)
-    else:
-        st.warning("Credenziali mancanti", icon="⚠️")
 
-    if st.session_state.get("show_wizard", False) or status != "ok":
-        st.info(
-            "Inserisci le tue credenziali Alpaca Paper. Le chiavi non saranno salvate nel repository Git.",
-            icon="ℹ️",
-        )
-        api_key = st.text_input("API Key")
-        secret_key = st.text_input("Secret", type="password")
-        base_url = st.text_input(
-            "Base URL",
-            value=creds.get("base_url", "https://paper-api.alpaca.markets"),
-        )
-        labels = {"keyring": "Keychain (consigliato)", "secrets": "secrets.toml", "env_file": ".env"}
-        target = st.selectbox("Metodo di archiviazione", list(labels.keys()), format_func=lambda x: labels[x])
-        if st.button("Salva & Test", type="primary"):
-            if not api_key or not secret_key:
-                st.error("API Key e Secret obbligatorie")
-            else:
-                try:
-                    save_credentials(target, api_key, secret_key, base_url)
-                    ok, err = test_alpaca_credentials(api_key, secret_key, base_url)
-                    if ok:
-                        reload_settings()
-                        st.session_state["show_wizard"] = False
-                        st.success("Credenziali verificate e salvate")
-                    else:
-                        st.error(f"Verifica fallita: {err}")
-                except Exception as e:
-                    st.error(f"Salvataggio fallito: {e}. Prova un altro metodo.")
+    if st.session_state.get("show_wizard", False):
+        step = st.session_state.get("wizard_step", 1)
+        if step == 1:
+            provider = st.selectbox("Provider", list(PROVIDERS.keys()), key="wizard_provider")
+            if st.button("Avanti", key="wizard_next1"):
+                st.session_state["wizard_step"] = 2
+        elif step == 2:
+            provider = st.session_state.get("wizard_provider", list(PROVIDERS.keys())[0])
+            names = secure_store.PROVIDER_VARS[provider]
+            st.text_input("API Key", key="wizard_key")
+            st.text_input("Secret", type="password", key="wizard_secret")
+            st.text_input("Base URL", value=names["default_base_url"], key="wizard_base_url")
+            if st.button("Avanti", key="wizard_next2"):
+                st.session_state["wizard_step"] = 3
+        elif step == 3:
+            labels = {"keyring": "Keychain (consigliato)", "secrets": "secrets.toml", "env_file": ".env"}
+            st.selectbox(
+                "Metodo di archiviazione",
+                list(labels.keys()),
+                format_func=lambda x: labels[x],
+                key="wizard_target",
+            )
+            if st.button("Salva & Test", type="primary", key="wizard_save"):
+                provider = st.session_state.get("wizard_provider")
+                key = st.session_state.get("wizard_key")
+                secret = st.session_state.get("wizard_secret")
+                base_url = st.session_state.get("wizard_base_url")
+                target = st.session_state.get("wizard_target")
+                if not key or not secret:
+                    st.error("API Key e Secret obbligatorie")
+                else:
+                    try:
+                        save_credentials(provider, target, key, secret, base_url)
+                        ok, err = test_credentials(provider, key, secret, base_url)
+                        if ok:
+                            reload_settings()
+                            st.session_state.update({"show_wizard": False, "wizard_step": 1})
+                            st.success("Credenziali verificate e salvate")
+                        else:
+                            st.error(f"Verifica fallita: {err}")
+                    except Exception as e:
+                        st.error(f"Salvataggio fallito: {e}. Prova un altro metodo.")
         st.caption("Le chiavi sono memorizzate localmente nel backend scelto.")
-    else:
-        show = st.checkbox("Mostra secret", value=False)
-        st.text_input("API Key", creds.get("key"), disabled=True)
+
+    for name in PROVIDERS:
+        st.markdown(f"### {name.title()}")
+        creds = load_credentials(name)
+        backend = current_storage_backend(name)
+        status = "missing"
+        detail = ""
+        if creds.get("key"):
+            ok, err = test_credentials(name, creds["key"], creds["secret"], creds["base_url"])
+            if ok:
+                status = "ok"
+            else:
+                status = "error"
+                detail = err
+        if status == "ok":
+            st.success("Credenziali verificate", icon="✅")
+        elif status == "error":
+            st.error("Errore credenziali", icon="❌")
+            if detail:
+                st.caption(detail)
+        else:
+            st.warning("Credenziali mancanti", icon="⚠️")
+
+        show = st.checkbox("Mostra secret", value=False, key=f"show_{name}")
+        st.text_input("API Key", creds.get("key"), disabled=True, key=f"key_{name}")
         st.text_input(
             "Secret",
             creds.get("secret") if show else "*" * len(creds.get("secret", "")),
             disabled=True,
+            key=f"secret_{name}",
         )
         st.write(f"Storage attuale: {backend or 'N/D'}")
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("Ruota chiavi"):
-                st.session_state["show_wizard"] = True
+            if st.button("Ruota chiavi", key=f"rotate_{name}"):
+                st.session_state.update({"show_wizard": True, "wizard_step": 1, "wizard_provider": name})
         with col2:
-            if st.button("Logout"):
+            if st.button("Logout", key=f"logout_{name}"):
                 if backend:
-                    clear_credentials(backend)
+                    clear_credentials(name, backend)
                 reload_settings()
-                st.session_state["show_wizard"] = True
+                st.session_state.update({"show_wizard": True, "wizard_step": 1, "wizard_provider": name})
                 st.warning("Credenziali rimosse")

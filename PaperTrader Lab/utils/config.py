@@ -1,117 +1,98 @@
-"""Configurazioni e gestione credenziali Alpaca."""
+"""Central configuration and credential management for multiple providers."""
 
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
+
+from pydantic_settings import BaseSettings
 
 from .logging_json import get_logger
 from . import secure_store
+from .providers import PROVIDERS
 
 log = get_logger("config")
 
-CURRENT_BACKEND: Optional[str] = None
+
+CURRENT_BACKEND: Dict[str, Optional[str]] = {}
 
 
-def load_credentials() -> Dict[str, str]:
-    """Carica le credenziali seguendo la precedence richiesta."""
-    global CURRENT_BACKEND
-    for backend, loader in [
-        ("env", secure_store.load_from_env),
-        ("secrets", secure_store.load_from_secrets),
-        ("keyring", secure_store.load_from_keyring),
-        ("env_file", secure_store.load_from_env_file),
-    ]:
-        creds = loader()
-        if creds:
-            CURRENT_BACKEND = backend
-            log.info("credentials_loaded", extra={"backend": backend})
-            return creds
-    CURRENT_BACKEND = None
-    log.info("credentials_missing")
-    return {"key": "", "secret": "", "base_url": "https://paper-api.alpaca.markets"}
+def load_credentials(provider: str) -> Dict[str, str]:
+    """Load credentials for the given provider following precedence."""
+    creds = secure_store.load(provider)
+    CURRENT_BACKEND[provider] = secure_store.current_storage_backend(provider)
+    log.info("credentials_loaded", extra={"provider": provider, "backend": CURRENT_BACKEND[provider]})
+    return creds
 
 
-def current_storage_backend() -> Optional[str]:
-    return CURRENT_BACKEND
+def current_storage_backend(provider: str) -> Optional[str]:
+    return CURRENT_BACKEND.get(provider)
 
 
-def save_credentials(target: str, key: str, secret: str, base_url: str) -> None:
-    writers = {
-        "secrets": secure_store.write_to_secrets,
-        "keyring": secure_store.write_to_keyring,
-        "env_file": secure_store.write_to_env_file,
-    }
-    if target not in writers:
-        raise ValueError(f"Unsupported target {target}")
-    writers[target](key, secret, base_url)
-    log.info("credentials_saved", extra={"backend": target})
+def save_credentials(provider: str, target: str, key: str, secret: str, base_url: str) -> None:
+    secure_store.save(provider, target, key, secret, base_url)
+    log.info("credentials_saved", extra={"provider": provider, "backend": target})
 
 
-def clear_credentials(target: str) -> None:
-    deleters = {
-        "secrets": secure_store.delete_secrets,
-        "keyring": secure_store.delete_keyring,
-        "env_file": secure_store.delete_env_file,
-    }
-    if target in deleters:
-        deleters[target]()
-        log.info("credentials_cleared", extra={"backend": target})
+def clear_credentials(provider: str, target: str) -> None:
+    secure_store.delete(provider, target)
+    log.info("credentials_cleared", extra={"provider": provider, "backend": target})
 
 
-def test_alpaca_credentials(key: str, secret: str, base_url: str) -> Tuple[bool, str]:
-    """Prova una chiamata "whoami" per verificare le credenziali."""
+def test_credentials(provider: str, key: str, secret: str, base_url: str) -> Tuple[bool, str]:
+    """Validate credentials using provider plugin."""
     try:
-        from alpaca.trading.client import TradingClient
-
-        client = TradingClient(
-            key,
-            secret,
-            paper="paper" in base_url,
-            url_override=base_url,
-        )
-        client.get_account()
+        PROVIDERS[provider].validate({"key": key, "secret": secret, "base_url": base_url})
         return True, ""
-    except Exception as e:  # pragma: no cover - network errors mocked nei test
+    except Exception as e:  # pragma: no cover - network or plugin errors
         return False, str(e)
 
 
-def _as_bool(x: str, default=False):
+def _as_bool(x: str, default: bool = False) -> bool:
     if x is None:
         return default
     return str(x).strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _build_settings(creds: Dict[str, str]):
-    @dataclass
-    class Settings:
-        default_engine: str = os.getenv("DEFAULT_ENGINE", "backtrader")
-        default_data_provider: str = os.getenv("DEFAULT_DATA_PROVIDER", "alpaca")
+class Settings(BaseSettings):
+    """Application settings resolved from environment/.env."""
 
-        enable_alpaca: bool = _as_bool(os.getenv("ENABLE_ALPACA", "true"))
-        enable_oanda: bool = _as_bool(os.getenv("ENABLE_OANDA", "false"))
-        enable_binance: bool = _as_bool(os.getenv("ENABLE_BINANCE", "false"))
+    default_engine: str = os.getenv("DEFAULT_ENGINE", "backtrader")
+    default_data_provider: str = os.getenv("DEFAULT_DATA_PROVIDER", "alpaca")
 
-        alpaca_api_key: str = creds.get("key", "")
-        alpaca_secret_key: str = creds.get("secret", "")
-        alpaca_base_url: str = creds.get("base_url", "https://paper-api.alpaca.markets")
-        alpaca_data_base_url: str = os.getenv("ALPACA_DATA_BASE_URL", "https://data.alpaca.markets")
-        alpaca_data_feed: str = os.getenv("ALPACA_DATA_FEED", "iex").lower()
+    enable_alpaca: bool = _as_bool(os.getenv("ENABLE_ALPACA", "true"))
+    enable_oanda: bool = _as_bool(os.getenv("ENABLE_OANDA", "false"))
+    enable_binance: bool = _as_bool(os.getenv("ENABLE_BINANCE", "false"))
 
-        av_key: str = os.getenv("ALPHAVANTAGE_API_KEY", "")
+    alpaca_api_key: str = ""
+    alpaca_secret_key: str = ""
+    alpaca_base_url: str = secure_store.PROVIDER_VARS["alpaca"]["default_base_url"]
 
-    return Settings()
+    oanda_api_key: str = ""
+    oanda_secret_key: str = ""
+    oanda_base_url: str = secure_store.PROVIDER_VARS["oanda"]["default_base_url"]
+
+    binance_api_key: str = ""
+    binance_secret_key: str = ""
+    binance_base_url: str = secure_store.PROVIDER_VARS["binance"]["default_base_url"]
+
+    class Config:
+        env_file = secure_store.ENV_FILE
 
 
-SETTINGS = _build_settings(load_credentials())
+SETTINGS = Settings()
 
 
 def reload_settings() -> None:
-    creds = load_credentials()
-    SETTINGS.alpaca_api_key = creds.get("key", "")
-    SETTINGS.alpaca_secret_key = creds.get("secret", "")
-    SETTINGS.alpaca_base_url = creds.get("base_url", "https://paper-api.alpaca.markets")
+    for name in PROVIDERS:
+        creds = load_credentials(name)
+        setattr(SETTINGS, f"{name}_api_key", creds.get("key", ""))
+        setattr(SETTINGS, f"{name}_secret_key", creds.get("secret", ""))
+        setattr(SETTINGS, f"{name}_base_url", creds.get("base_url", ""))
+
+
+# Load at import time
+reload_settings()
 
 
 __all__ = [
@@ -119,8 +100,9 @@ __all__ = [
     "load_credentials",
     "save_credentials",
     "clear_credentials",
-    "test_alpaca_credentials",
+    "test_credentials",
     "current_storage_backend",
     "reload_settings",
+    "PROVIDERS",
 ]
 
