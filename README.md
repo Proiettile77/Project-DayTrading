@@ -30,28 +30,45 @@
 
 ---
 
-## 🔑 Configurazione credenziali
+## 🔐 Credenziali & Deploy
 
-Al primo avvio l'applicazione mostra un **Setup Wizard** per inserire le credenziali *Alpaca Paper*.
+L'app supporta più provider con un **wizard di primo login** e un pannello "Impostazioni" per ruotare/migrare le chiavi.
 
-1. Inserisci **API Key** e **Secret** (quest'ultima è mascherata).
-2. Scegli dove salvarle:
-   - **Keychain** (consigliato, usa `keyring` del sistema operativo)
-   - `secrets.toml` (`.streamlit/secrets.toml`)
-   - file `.env`
-3. Premi **Salva & Test** → le chiavi vengono memorizzate, ricaricate e verificate con una chiamata di prova.
+Provider attivi di default:
 
-Ordine di precedenza al caricamento:
-1. Variabili d'ambiente (`APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`, `APCA_API_BASE_URL`)
+- **Alpaca Paper** – trading demo su azioni USA
+- **OANDA Practice** – forex demo
+- **Binance Spot Testnet** – crypto demo
+
+### Ordine di precedenza
+
+1. Variabili d'ambiente
 2. `st.secrets` (`.streamlit/secrets.toml`)
-3. Keychain (`keyring`, servizio `alpaca`, utente `default`)
+3. Keyring del sistema operativo
 4. File `.env`
 
-Le chiavi **non** vengono mai salvate nel repository Git. Per distribuire l'app in ambienti gestiti (es. Streamlit Cloud) usa `st.secrets`; in locale preferisci il Keychain oppure `.env` (ignorato da Git).
+I salvataggi sono **non distruttivi**: quando si scrive su `.env` viene creato un backup `.env.bak` e le chiavi esistenti vengono mantenute.
 
-Esempio di `.env`:
+### Backend di storage
+
+| Backend        | Vantaggi                              | Svantaggi |
+|---------------|---------------------------------------|-----------|
+| Keyring       | Sicuro, consigliato per uso locale    | Dipende dal sistema operativo |
+| `st.secrets`  | Comodo in deploy (Streamlit Cloud)    | File non cifrato su disco |
+| `.env`        | Semplice per sviluppo locale          | Non cifrato, va escluso da Git |
+
+`.env` e `.streamlit/secrets.toml` sono già ignorati da Git; usa `.env.example` come riferimento.
+
+### Setup rapido
+
+1. Avvia l'app e segui il wizard: scegli provider → inserisci API Key/Secret/Base URL → scegli backend → **Salva & Test**.
+2. Nella tab "Impostazioni" puoi verificare lo stato (icone ✅/⚠️/❌), mostrare i secret mascherati, ruotare o cancellare le chiavi.
+3. Per migrare le chiavi tra backend, usa il wizard scegliendo una destinazione diversa; lo `.env` originale viene mantenuto con backup.
+
+Esempio `.env` generato:
 
 ```bash
+ENABLE_ALPACA=true
 APCA_API_KEY_ID=pk_xxxxxxxxxxxxxxxx
 APCA_API_SECRET_KEY=sk_xxxxxxxxxxxxxxxx
 APCA_API_BASE_URL=https://paper-api.alpaca.markets

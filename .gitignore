@@ -1,5 +1,6 @@
 # Environment and secrets
 .env
+.env.bak
 .streamlit/secrets.toml
 
 # Bytecode
