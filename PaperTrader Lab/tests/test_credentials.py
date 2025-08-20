@@ -36,7 +36,13 @@ def test_migrate_env_to_keyring(tmp_path, monkeypatch):
 
 
 def test_test_credentials(monkeypatch):
+    import httpx
     import utils.config as config
+
+    def fake_get(url, headers=None, timeout=None):
+        return httpx.Response(200, request=httpx.Request("GET", url), text="ok")
+
+    monkeypatch.setattr(httpx, "get", fake_get)
 
     ok, err = config.test_credentials("alpaca", "k", "s", "https://paper-api.alpaca.markets")
     assert ok and err == ""
